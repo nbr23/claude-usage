@@ -3,7 +3,7 @@
 ## v1.1.0 — 2026-05-28
 
 - Fix `ReferenceError: cutoff is not defined` that blanked the dashboard whenever the hourly filter ran (#73, thanks @thomasleveil)
-- Fix hourly chart ignoring the range upper bound for `month` / `prev-month` / custom date picker
+- Fix hourly chart ignoring the range upper bound for `week` / `month` / `prev-month` ranges
 - Fix 404 on dashboard URLs containing query strings (`?range=...&models=...`) so reloads and bookmarks work (#81, thanks @jakduch)
 - Fix incremental scan not updating `first_timestamp` when a newly discovered session's records arrive out of order (#111, thanks @Fruhji)
 - Use `ThreadingHTTPServer` so a slow `/api/data` no longer blocks other dashboard requests (#79, thanks @jakduch)
