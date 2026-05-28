@@ -101,6 +101,31 @@ When merging community PRs, **preserve the original author's commit so they get 
 
 This applies to all agents working on this repo, not just Claude Code.
 
+## Versioning and releases
+
+This project follows [SemVer](https://semver.org/) with two conventions specific to how releases are surfaced:
+
+1. **Tags always.** Every version that lands on `main` gets an annotated git tag (`git tag -a vX.Y.Z -m "vX.Y.Z"`). No exceptions for patch versions. The tag goes on the merge commit, not on individual contributor commits inside the merge bubble. Tags pay off in three places: Homebrew formula pinning (`archive/refs/tags/vX.Y.Z.tar.gz` is stabler than commit SHAs), `git log vX.Y.Z-1..vX.Y.Z` for changelog work, and `gh release create <tag>` later if a release ever needs to be promoted retroactively.
+
+2. **Formal GitHub Releases only for major versions.** Patch (`vX.Y.Z` where `Z` increments) and minor (`Y` increments) bumps ship as a tag and a CHANGELOG entry — that's the entire release process. Formal `gh release create` with release notes, asset uploads, and the "Latest release" badge is reserved for major versions (`X` increments), where breaking changes or significant new surface area warrant a notification to people who follow only Releases.
+
+Why: patches and minors are the quiet bug-fix-and-improve cadence; CHANGELOG.md is the canonical record. Majors are the "you should read this before upgrading" events; that's what Releases are for.
+
+When the maintainer says "release v1.1.1", the steps are:
+- Finalize CHANGELOG (replace `TBD` with today's date)
+- Merge DEV → main (`merge --no-ff` so the release boundary is visible in `git log main`)
+- `git tag -a v1.1.1 -m "v1.1.1"` on the merge commit
+- `git push origin main --follow-tags`
+- No `gh release create` call (that's for majors)
+
+Tags are **annotated** (`git tag -a`, not lightweight) and are created **only** on `main`'s release merge commits — never on individual contributor commits inside a merge bubble, never on `DEV`.
+
+Note: v1.1.0 shipped before this convention was documented and therefore has no tag. The convention applies forward from v1.1.1. Don't retroactively tag v1.1.0 without explicit maintainer ask.
+
+### Homebrew formula and self-referential SHA
+
+The Homebrew formula at `Formula/claude-usage.rb` lives inside this same repo. Be careful when bumping it: if the formula's `url` points at a tarball that **contains the formula itself with that sha256**, the sha256 is self-referential and uncomputable. Practical rule: a release's formula must point at the **previous** release's tarball, never its own. In v1.1.1 the formula points at v1.1.0's commit-SHA tarball, so brew users installing v1.1.1's formula receive v1.1.0 code — that's the trade-off of keeping the formula in-tree.
+
 ## Weekly triage routine
 
 The repo has a self-contained slash command at [.claude/commands/triage.md](.claude/commands/triage.md) that automates the weekly PR/issue cleanup we used to ship v1.1.0: classify open items with Codex, merge no-brainers to DEV preserving authorship, run tests, close duplicates / scope-violations with friendly messages, bump CHANGELOG by patch, push DEV. **The routine never pushes to `main`** — release decisions stay with the maintainer.

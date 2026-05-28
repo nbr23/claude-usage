@@ -1,10 +1,15 @@
 # Changelog
 
-## v1.1.1 — TBD
+## v1.1.1 — 2026-05-28
 
 ### Packaging
 
 - Add Homebrew formula at `Formula/claude-usage.rb` and install instructions; `claude-usage` is now installable on macOS/Linux without `git clone` (#46, #71, thanks @HaydenHaines)
+
+### Project / docs
+
+- Adopt versioning convention: SemVer with tags on every release, formal GitHub Releases only for major versions. Documented in AGENTS.md.
+- Tighten `/triage` routine to leave the CHANGELOG date as `TBD` and let the maintainer fill it in at tag time.
 
 ## v1.1.0 — 2026-05-28
 
