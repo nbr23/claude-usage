@@ -1,11 +1,13 @@
 """Tests for scanner.py - JSONL parsing, DB operations, and scanning."""
 
+import importlib
 import json
 import os
 import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from scanner import (
     get_db, init_db, project_name_from_cwd, parse_jsonl_file,
@@ -962,6 +964,39 @@ class TestTopicBackfill(unittest.TestCase):
         self.assertEqual(conn.execute("SELECT topic FROM sessions WHERE session_id='keep'").fetchone()[0], "existing")
         self.assertEqual(conn.execute("SELECT topic FROM sessions WHERE session_id='fill'").fetchone()[0], "filled")
         conn.close()
+
+
+class TestClaudeConfigDirEnvVar(unittest.TestCase):
+    """PROJECTS_DIR must follow CLAUDE_CONFIG_DIR — the env var Claude Code
+    itself uses to relocate ~/.claude — or scanning a relocated install finds
+    nothing. PROJECTS_DIR/DEFAULT_PROJECTS_DIRS are computed at import time, so
+    this needs a reload under the patched env, then a reload back to restore
+    the module for every other test in the suite."""
+
+    def test_projects_dir_honors_claude_config_dir(self):
+        import scanner as _s
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": tmp}):
+                importlib.reload(_s)
+                try:
+                    self.assertEqual(_s.PROJECTS_DIR, Path(tmp) / "projects")
+                    self.assertIn(_s.PROJECTS_DIR, _s.DEFAULT_PROJECTS_DIRS)
+                finally:
+                    importlib.reload(_s)  # restore the env-derived default
+
+    def test_db_path_default_unaffected_by_claude_config_dir(self):
+        # DB_PATH must NOT silently move just because CLAUDE_CONFIG_DIR is set
+        # for unrelated reasons — only the explicit --claude-dir flag or
+        # CLAUDE_USAGE_DB relocate it.
+        import scanner as _s
+        original_db_path = _s.DB_PATH
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": tmp}):
+                importlib.reload(_s)
+                try:
+                    self.assertEqual(_s.DB_PATH, original_db_path)
+                finally:
+                    importlib.reload(_s)
 
 
 if __name__ == "__main__":

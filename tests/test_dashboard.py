@@ -8,6 +8,7 @@ import threading
 import unittest
 import urllib.request
 from pathlib import Path
+from unittest import mock
 
 from scanner import get_db, init_db, upsert_sessions, insert_turns
 from dashboard import get_dashboard_data, DashboardHandler, HTML_TEMPLATE
@@ -377,6 +378,41 @@ class TestDashboardHTTP(unittest.TestCase):
         self.assertEqual(turn_count, 1, "rescan must not delete existing turns")
         self.assertEqual(sess_count, 1, "rescan must not delete existing sessions")
 
+    def test_api_rescan_honors_custom_projects_dirs(self):
+        # Regression: /api/rescan must scan whatever dirs the dashboard was
+        # actually started with (dashboard.PROJECTS_DIRS), not always fall
+        # back to scanner.DEFAULT_PROJECTS_DIRS (which setUpClass points at an
+        # empty dir). Seed a *second*, populated projects dir and point
+        # PROJECTS_DIRS at it directly.
+        import dashboard as _d
+        with tempfile.TemporaryDirectory() as custom_tmp:
+            custom_projects = Path(custom_tmp) / "projects" / "myproj"
+            custom_projects.mkdir(parents=True)
+            transcript = custom_projects / "session.jsonl"
+            transcript.write_text(
+                '{"type":"assistant","sessionId":"custom-sess","timestamp":'
+                '"2026-05-01T09:00:00Z","cwd":"/home/user/myproj","message":'
+                '{"id":"msg-custom-1","model":"claude-sonnet-4-6","usage":'
+                '{"input_tokens":10,"output_tokens":5}}}\n'
+            )
+            _d.PROJECTS_DIRS = [Path(custom_tmp) / "projects"]
+            try:
+                url = f"http://127.0.0.1:{self.port}/api/rescan"
+                req = urllib.request.Request(url, method="POST")
+                with urllib.request.urlopen(req) as resp:
+                    self.assertEqual(resp.status, 200)
+            finally:
+                _d.PROJECTS_DIRS = None
+
+            conn = sqlite3.connect(_d.DB_PATH)
+            try:
+                count = conn.execute(
+                    "SELECT COUNT(*) FROM turns WHERE session_id = 'custom-sess'"
+                ).fetchone()[0]
+            finally:
+                conn.close()
+            self.assertEqual(count, 1, "rescan must use dashboard.PROJECTS_DIRS when set")
+
     def test_404_for_unknown_path(self):
         url = f"http://127.0.0.1:{self.port}/nonexistent"
         try:
@@ -398,6 +434,44 @@ class TestDashboardHTTP(unittest.TestCase):
         self.assertIn(VERSION, body)
         # The HTTP test server keeps the default surface ("web").
         self.assertIn('"surface": "web"', body)
+
+
+class TestServeRebindsGlobals(unittest.TestCase):
+    """serve() must rebind DB_PATH/PROJECTS_DIRS from kwargs before the server
+    starts, so /api/data and /api/rescan honor a --claude-dir/--projects-dir
+    override the process was started with."""
+
+    def test_serve_rebinds_db_path_and_projects_dirs(self):
+        import dashboard as _d
+        orig_db_path = _d.DB_PATH
+        orig_projects_dirs = _d.PROJECTS_DIRS
+        try:
+            with mock.patch("dashboard.ThreadingHTTPServer") as mock_server_cls:
+                mock_server_cls.return_value.serve_forever.return_value = None
+                _d.serve(
+                    host="127.0.0.1", port=0,
+                    db_path="/tmp/custom-claude/usage.db",
+                    projects_dirs=[Path("/tmp/custom-claude/projects")],
+                )
+            self.assertEqual(_d.DB_PATH, Path("/tmp/custom-claude/usage.db"))
+            self.assertEqual(_d.PROJECTS_DIRS, [Path("/tmp/custom-claude/projects")])
+        finally:
+            _d.DB_PATH = orig_db_path
+            _d.PROJECTS_DIRS = orig_projects_dirs
+
+    def test_serve_leaves_globals_untouched_when_not_given(self):
+        import dashboard as _d
+        orig_db_path = _d.DB_PATH
+        orig_projects_dirs = _d.PROJECTS_DIRS
+        try:
+            with mock.patch("dashboard.ThreadingHTTPServer") as mock_server_cls:
+                mock_server_cls.return_value.serve_forever.return_value = None
+                _d.serve(host="127.0.0.1", port=0)
+            self.assertEqual(_d.DB_PATH, orig_db_path)
+            self.assertEqual(_d.PROJECTS_DIRS, orig_projects_dirs)
+        finally:
+            _d.DB_PATH = orig_db_path
+            _d.PROJECTS_DIRS = orig_projects_dirs
 
 
 class TestHTMLTemplate(unittest.TestCase):

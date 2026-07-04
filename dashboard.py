@@ -10,9 +10,14 @@ from urllib.parse import urlparse
 from pathlib import Path
 from datetime import datetime
 
-from scanner import VERSION, init_db
+from scanner import VERSION, DB_PATH, init_db
 
-DB_PATH = Path(os.environ.get("CLAUDE_USAGE_DB", Path.home() / ".claude" / "usage.db"))
+# Projects dirs this dashboard process actually scans. None -> fall back to
+# scanner.DEFAULT_PROJECTS_DIRS. Populated by serve()/cmd_dashboard when
+# --claude-dir/--projects-dir was passed at startup; read (not written) by
+# /api/rescan so a browser-triggered rescan honors the same custom location
+# the dashboard was started with, instead of always reverting to the default.
+PROJECTS_DIRS = None
 
 # Which surface is rendering the dashboard: "web" (standalone `cli.py dashboard`)
 # or "vscode" (embedded in the extension's sidebar webview). serve() sets this
@@ -2256,14 +2261,15 @@ class DashboardHandler(BaseHTTPRequestHandler):
             # existing rows. The DB is append-only and the only durable store
             # of history once Claude Code prunes old transcripts, so we must
             # never delete it here — scan() dedupes via the message_id index.
-            # Pass DB_PATH / DEFAULT_PROJECTS_DIRS explicitly so tests that
-            # patch the module globals are honored (scan's defaults are
-            # frozen at def time and would otherwise target the real paths).
+            # Pass DB_PATH / PROJECTS_DIRS explicitly so tests that patch the
+            # module globals are honored (scan's defaults are frozen at def
+            # time and would otherwise target the real paths), and so a
+            # dashboard started with --claude-dir/--projects-dir rescans the
+            # same custom location instead of the scanner's default dirs.
             import scanner
-            db_path = DB_PATH
             result = scanner.scan(
-                db_path=db_path,
-                projects_dirs=scanner.DEFAULT_PROJECTS_DIRS,
+                db_path=DB_PATH,
+                projects_dirs=PROJECTS_DIRS or scanner.DEFAULT_PROJECTS_DIRS,
                 verbose=False,
             )
             body = json.dumps(result).encode("utf-8")
@@ -2277,10 +2283,14 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self.end_headers()
 
 
-def serve(host=None, port=None, surface=None):
-    global SURFACE
+def serve(host=None, port=None, surface=None, db_path=None, projects_dirs=None):
+    global SURFACE, DB_PATH, PROJECTS_DIRS
     if surface:
         SURFACE = surface
+    if db_path:
+        DB_PATH = Path(db_path)
+    if projects_dirs:
+        PROJECTS_DIRS = list(projects_dirs)
     host = host or os.environ.get("HOST", "localhost")
     port = port or int(os.environ.get("PORT", "8080"))
     server = ThreadingHTTPServer((host, port), DashboardHandler)

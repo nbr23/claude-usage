@@ -103,6 +103,17 @@ python cli.py today
 # Show the last 7 days (per-day breakdown + by-model totals)
 python cli.py week
 
+# Show the current month to date (per-day breakdown + by-model totals)
+python cli.py month
+
+# Show usage for a specific year, month, or day
+python cli.py range 2026
+python cli.py range 2026-06
+python cli.py range 2026-06-15
+
+# Show usage for an explicit date range (inclusive)
+python cli.py range 2026-06-01 2026-06-15
+
 # Show all-time statistics (in terminal)
 python cli.py stats
 
@@ -112,13 +123,21 @@ python cli.py dashboard
 # Custom host and port via environment variables
 HOST=0.0.0.0 PORT=9000 python cli.py dashboard
 
-# Scan a custom projects directory
+# Scan a custom projects directory (drops the Xcode integration dir)
 python cli.py scan --projects-dir /path/to/transcripts
+
+# Point every command at an arbitrary Claude Code home directory — its
+# projects/ dir *and* its usage.db — e.g. when it's mounted at a non-standard
+# path in a container
+python cli.py scan --claude-dir /path/to/claude-home
+python cli.py dashboard --claude-dir /path/to/claude-home
 ```
 
 The scanner is incremental — it tracks each file's path and modification time, so re-running `scan` is fast and only processes new or changed files.
 
-By default, the scanner checks both `~/.claude/projects/` and the Xcode Claude integration directory (`~/Library/Developer/Xcode/CodingAssistant/ClaudeAgentConfig/projects/`), skipping any that don't exist. Use `--projects-dir` to scan a custom location instead.
+By default, the scanner checks both `~/.claude/projects/` and the Xcode Claude integration directory (`~/Library/Developer/Xcode/CodingAssistant/ClaudeAgentConfig/projects/`), skipping any that don't exist. Use `--projects-dir` to scan a custom location instead (this drops the Xcode dir; the database location is unaffected).
+
+If Claude Code's own [`CLAUDE_CONFIG_DIR`](https://code.claude.com/docs/en/claude-directory) environment variable is set (it relocates `~/.claude` for Claude Code itself), scanning automatically follows it — no flag needed. The database still defaults to `~/.claude/usage.db` in that case, so an existing installation's history never moves just because that env var happens to be set for something else. Use `--claude-dir PATH` to explicitly point every command (`scan`, `today`, `week`, `month`, `range`, `stats`, `dashboard`) at a whole alternate directory — it scans `PATH/projects` (plus the Xcode dir) and relocates the database to `PATH/usage.db`, unless `CLAUDE_USAGE_DB` is set, which always wins.
 
 ---
 
