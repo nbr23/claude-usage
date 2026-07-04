@@ -122,8 +122,8 @@ def resolve_dir_overrides(rest):
     return projects_dir, projects_dirs, db_path
 
 
-def positional_args(args, flags=("--claude-dir", "--projects-dir")):
-    """Return `args` with any recognized `--flag value` pairs stripped out."""
+def positional_args(args, flags=("--claude-dir", "--projects-dir"), bool_flags=("--scan",)):
+    """Return `args` with any recognized `--flag value` pairs and boolean flags stripped out."""
     result, skip = [], False
     for a in args:
         if skip:
@@ -131,6 +131,8 @@ def positional_args(args, flags=("--claude-dir", "--projects-dir")):
             continue
         if a in flags:
             skip = True
+            continue
+        if a in bool_flags:
             continue
         result.append(a)
     return result
@@ -624,12 +626,12 @@ Claude Code Usage Dashboard
 Usage:
   python cli.py scan [--projects-dir PATH] [--claude-dir PATH]
                                               Scan JSONL files and update database
-  python cli.py today                        Show today's usage summary
-  python cli.py week                         Show last 7 days (per-day + by-model)
-  python cli.py month                        Show month-to-date usage (per-day + by-model)
-  python cli.py range YYYY | YYYY-MM | YYYY-MM-DD [YYYY-MM-DD]
+  python cli.py today [--scan]               Show today's usage summary
+  python cli.py week [--scan]                Show last 7 days (per-day + by-model)
+  python cli.py month [--scan]               Show month-to-date usage (per-day + by-model)
+  python cli.py range YYYY | YYYY-MM | YYYY-MM-DD [YYYY-MM-DD] [--scan]
                                               Show usage for a year, month, day, or explicit range
-  python cli.py stats                        Show all-time statistics
+  python cli.py stats [--scan]               Show all-time statistics
   python cli.py dashboard [--projects-dir PATH] [--claude-dir PATH] [--host HOST] [--port PORT] [--no-browser] [--surface SURFACE]
                                                  Scan + start dashboard (opens a browser unless --no-browser)
   python cli.py --version                    Print the version and exit
@@ -639,6 +641,10 @@ Usage:
                        Also auto-detected via the CLAUDE_CONFIG_DIR env var for
                        scanning (see README). CLAUDE_USAGE_DB always wins for
                        the database location if set.
+  --scan               Rescan before running a report command (today/week/month/
+                       range/stats), so the output reflects the latest transcripts
+                       without a separate `scan` call first. No effect on `scan`
+                       or `dashboard`, which already scan.
 """
 
 COMMANDS = {
@@ -684,10 +690,14 @@ def main():
         )
     elif command == "scan":
         cmd_scan(projects_dir=projects_dir, projects_dirs=projects_dirs, db_path=db_path)
-    elif command == "range":
-        cmd_range(*positional_args(rest), db_path=db_path)
     else:
-        COMMANDS[command](db_path=db_path)
+        if "--scan" in rest:
+            cmd_scan(projects_dir=projects_dir, projects_dirs=projects_dirs, db_path=db_path)
+            print()
+        if command == "range":
+            cmd_range(*positional_args(rest), db_path=db_path)
+        else:
+            COMMANDS[command](db_path=db_path)
 
 
 if __name__ == "__main__":

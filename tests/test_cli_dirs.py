@@ -2,6 +2,7 @@
 
 import io
 import os
+import sys
 import tempfile
 import unittest
 from contextlib import redirect_stdout
@@ -73,6 +74,48 @@ class TestPositionalArgs(unittest.TestCase):
         self.assertEqual(
             cli.positional_args(["2026-06-01", "2026-06-15"]),
             ["2026-06-01", "2026-06-15"])
+
+    def test_strips_scan_flag(self):
+        self.assertEqual(
+            cli.positional_args(["2026-06", "--scan"]),
+            ["2026-06"])
+
+    def test_strips_scan_flag_mixed_with_claude_dir(self):
+        self.assertEqual(
+            cli.positional_args(["--scan", "--claude-dir", "/tmp/x", "2026"]),
+            ["2026"])
+
+
+class TestMainScanFlag(unittest.TestCase):
+    def _run_main(self, argv):
+        buf = io.StringIO()
+        with mock.patch.object(sys, "argv", argv), redirect_stdout(buf):
+            cli.main()
+        return buf.getvalue()
+
+    def test_scan_flag_rescans_before_report(self):
+        tmp = Path(tempfile.mkdtemp())
+        (tmp / "projects").mkdir()
+        out = self._run_main(["cli.py", "stats", "--scan", "--claude-dir", str(tmp)])
+        self.assertIn("Scan complete", out)
+        self.assertIn("All-Time Statistics", out)
+        self.assertTrue((tmp / "usage.db").exists())
+
+    def test_without_scan_flag_fails_on_missing_db(self):
+        tmp = Path(tempfile.mkdtemp())
+        buf = io.StringIO()
+        with mock.patch.object(sys, "argv", ["cli.py", "stats", "--claude-dir", str(tmp)]), \
+                redirect_stdout(buf):
+            with self.assertRaises(SystemExit):
+                cli.main()
+        self.assertIn("Database not found", buf.getvalue())
+
+    def test_scan_flag_does_not_break_range_date_parsing(self):
+        tmp = Path(tempfile.mkdtemp())
+        (tmp / "projects").mkdir()
+        out = self._run_main(["cli.py", "range", "2026", "--scan", "--claude-dir", str(tmp)])
+        self.assertIn("Scan complete", out)
+        self.assertIn("2026-01-01 to 2026-12-31", out)
 
 
 class TestCmdScanThreading(unittest.TestCase):

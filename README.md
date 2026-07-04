@@ -131,6 +131,10 @@ python cli.py scan --projects-dir /path/to/transcripts
 # path in a container
 python cli.py scan --claude-dir /path/to/claude-home
 python cli.py dashboard --claude-dir /path/to/claude-home
+
+# Rescan first, then print the report — one call instead of `scan` + `today`
+python cli.py today --scan
+python cli.py range 2026-06 --scan --claude-dir /path/to/claude-home
 ```
 
 The scanner is incremental — it tracks each file's path and modification time, so re-running `scan` is fast and only processes new or changed files.
@@ -138,6 +142,8 @@ The scanner is incremental — it tracks each file's path and modification time,
 By default, the scanner checks both `~/.claude/projects/` and the Xcode Claude integration directory (`~/Library/Developer/Xcode/CodingAssistant/ClaudeAgentConfig/projects/`), skipping any that don't exist. Use `--projects-dir` to scan a custom location instead (this drops the Xcode dir; the database location is unaffected).
 
 If Claude Code's own [`CLAUDE_CONFIG_DIR`](https://code.claude.com/docs/en/claude-directory) environment variable is set (it relocates `~/.claude` for Claude Code itself), scanning automatically follows it — no flag needed. The database still defaults to `~/.claude/usage.db` in that case, so an existing installation's history never moves just because that env var happens to be set for something else. Use `--claude-dir PATH` to explicitly point every command (`scan`, `today`, `week`, `month`, `range`, `stats`, `dashboard`) at a whole alternate directory — it scans `PATH/projects` (plus the Xcode dir) and relocates the database to `PATH/usage.db`, unless `CLAUDE_USAGE_DB` is set, which always wins.
+
+`today`, `week`, `month`, `range`, and `stats` normally just read the existing database — pass `--scan` to rescan first, so the report reflects the latest transcripts without a separate `scan` call. `scan` and `dashboard` already scan on their own, so `--scan` has no effect there.
 
 ---
 
